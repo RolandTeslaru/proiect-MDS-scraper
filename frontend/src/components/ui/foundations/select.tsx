@@ -63,7 +63,7 @@ const Trigger: SelectComponents.Trigger = ({ className, children, size = "sm", v
         data-[size=sm]:h-7 data-[size=sm]:px-2 data-[size=sm]:py-0.5 data-[size=sm]:text-sm
         data-[size=xs]:h-6 data-[size=xs]:px-1.5 data-[size=xs]:py-0.5 data-[size=xs]:text-xs
         *:data-[slot=select-value]:truncate *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:block [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4`,
-        triggerVariantClasses[variant],
+        triggerVariantClasses[variant as keyof typeof triggerVariantClasses],
         className
       )}
       {...props}
@@ -194,14 +194,14 @@ const Item: SelectComponents.Item = ({ className, children, size, ...props }) =>
        *:[span]:last:items-center
        *:[span]:last:gap-2
        `,
-      itemSizeClasses[resolvedSize],
+      itemSizeClasses[resolvedSize as SelectSize],
       className
     )}
     {...props}
   >
     <span className={cn(
       "absolute flex items-center justify-center text-label-primary",
-      itemIndicatorClasses[resolvedSize]
+      itemIndicatorClasses[resolvedSize as SelectSize]
     )}>
       <SelectPrimitive.ItemIndicator>
         <SystemIcons.Check className={resolvedSize === "xs" ? "size-3" : "size-4"} />

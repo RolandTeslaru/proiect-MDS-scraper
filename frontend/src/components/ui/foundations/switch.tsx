@@ -51,7 +51,9 @@ const switchThumbVariants = cva(
 
 export interface SwitchProps
   extends ComponentProps<typeof SwitchPrimitives.Root>,
-  VariantProps<typeof switchVariants> { }
+  VariantProps<typeof switchVariants> {
+  className?: string
+}
 
 const Switch = ({ className, size, ...props }: SwitchProps) => (
   <SwitchPrimitives.Root

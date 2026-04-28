@@ -7,6 +7,7 @@ import { rootVars, trackVars, thumbVars, rangeVars, type SliderVariants } from '
 
 
 interface DualRangeSliderProps extends React.ComponentProps<typeof SliderPrimitive.Root> {
+  className?: string
   labelPosition?: 'top' | 'bottom';
   label?: (value: number | undefined) => React.ReactNode;
   variant?: SliderVariants
@@ -16,7 +17,8 @@ const DualRangeSlider = React.forwardRef<
   React.ComponentRef<typeof SliderPrimitive.Root>,
   DualRangeSliderProps
 >(({ className, label, variant, labelPosition = 'top', ...props }, ref) => {
-  const initialValue = Array.isArray(props.value) ? props.value : [props.min, props.max];
+  const sliderProps = props as React.ComponentProps<typeof SliderPrimitive.Root>
+  const initialValue = Array.isArray(sliderProps.value) ? sliderProps.value : [sliderProps.min, sliderProps.max];
 
   return (
     <SliderPrimitive.Root
@@ -27,7 +29,7 @@ const DualRangeSlider = React.forwardRef<
       <SliderPrimitive.Track className={cn(trackVars({ variant }))}>
         <SliderPrimitive.Range className={cn(rangeVars({ variant }))} />
       </SliderPrimitive.Track>
-      {initialValue.map((value, index) => (
+      {(initialValue as (number | undefined)[]).map((value, index) => (
         <SliderPrimitive.Thumb key={index} className={cn(thumbVars({ variant }))}>
           {label && (
             <span
