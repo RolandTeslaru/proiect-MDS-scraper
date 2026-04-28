@@ -25,6 +25,28 @@ export const analysisService = {
   },
 }
 
+export interface TikTokComment {
+  author: string
+  text: string
+  likes: string
+}
+
+export interface TikTokVideo {
+  url: string
+  comments: TikTokComment[]
+}
+
+export interface SearchResult {
+  videos: TikTokVideo[]
+}
+
+export const searchService = {
+  async search(query: string): Promise<SearchResult> {
+    const { data } = await api.post<SearchResult>('/search', { query })
+    return data
+  },
+}
+
 export const healthCheck = async (): Promise<boolean> => {
   try {
     const response = await api.get('/health')

@@ -4,6 +4,7 @@ import stealthPlugin from "puppeteer-extra-plugin-stealth";
 import type { BrowserContext, Page } from "playwright";
 import path from "path";
 import { fileURLToPath } from "url";
+import { log } from "./logger.js";
 
 chromium.use(stealthPlugin());
 
@@ -18,6 +19,7 @@ let context: BrowserContext | null = null;
 export async function getBrowserContext(): Promise<BrowserContext> {
   if (context) return context;
 
+  log.info(`Launching browser (session: ${USER_DATA_DIR})`);
   context = await chromium.launchPersistentContext(USER_DATA_DIR, {
     headless: false,        // set true for production/Railway
     args: [
@@ -33,6 +35,7 @@ export async function getBrowserContext(): Promise<BrowserContext> {
     timezoneId,
   });
 
+  log.ok("Browser launched");
   return context;
 }
 
@@ -40,11 +43,13 @@ export async function getPage(): Promise<Page> {
   const ctx = await getBrowserContext();
   const page = await ctx.newPage();
   await page.emulateMedia({ colorScheme: "dark" });
+  log.info("New page created");
   return page;
 }
 
 export async function closeBrowser(): Promise<void> {
   if (context) {
+    log.info("Closing browser");
     await context.close();
     context = null;
   }
