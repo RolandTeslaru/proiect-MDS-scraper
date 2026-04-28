@@ -5,6 +5,7 @@ import { Input } from '../components/ui/foundations/input'
 import { Card } from '../components/ui/foundations/card'
 import { StatusBadge, VerdictBadge, formatTime } from '../components/badges'
 import { MOCK_JOBS } from '../data/mockJobs'
+import { healthCheck } from '../utils/api'
 
 export const Route = createFileRoute('/')({
   component: ScrapePage,
@@ -37,6 +38,9 @@ function ScrapePage() {
         <p className="text-sm text-muted-foreground">
           Paste a TikTok video URL — our AI agent scrapes, downloads, and classifies it via Google Vertex AI.
         </p>
+        <Button onClick={() => healthCheck()}>
+          <p>Health Check</p>
+        </Button>
       </div>
 
       {/* URL form */}

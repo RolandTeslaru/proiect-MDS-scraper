@@ -3,12 +3,16 @@ import cors from "cors";
 import { addJob } from "./queue";
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: true }));
 app.use(express.json());
 
-app.get("/health", (_req, res) => {
+const sendHealth = (_req: express.Request, res: express.Response) => {
   res.json({ ok: true });
-});
+  console.log("[backend] Health check OK")
+};
+
+app.get("/health", sendHealth);
+app.get("/api/health", sendHealth);
 
 app.post("/api/analyze", async (req, res) => {
   const { url } = req.body;
@@ -29,7 +33,7 @@ app.post("/api/analyze", async (req, res) => {
   }
 });
 
-const PORT = Number(process.env.PORT ?? 3001);
+const PORT = Number(process.env.PORT ?? 3003);
 app.listen(PORT, () => {
   console.log(`[backend] listening on http://localhost:${PORT}`);
 });

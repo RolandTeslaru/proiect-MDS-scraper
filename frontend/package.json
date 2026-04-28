@@ -33,6 +33,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-router": "^1.168.23",
     "@tanstack/react-router-devtools": "^1.166.13",
+    "axios": "^1.15.2",
     "class-variance-authority": "^0.7.1",
     "classnames": "^2.5.1",
     "clsx": "^2.1.1",
