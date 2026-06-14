@@ -56,3 +56,30 @@ export const healthCheck = async (): Promise<boolean> => {
     return false
   }
 }
+
+export type JobStatus = 'pending' | 'processing' | 'done' | 'failed'
+export type Verdict = 'disinformation' | 'authentic' | null
+
+export interface Job {
+  id: string
+  sourceUrl: string
+  status: JobStatus
+  createdAt: string
+  verdict: Verdict
+  confidence: number | null
+  processedAt: string | null
+  evidence: string | null
+  reasons: string[] | null
+}
+
+export const jobsService = {
+  async list(limit = 50): Promise<Job[]> {
+    const { data } = await api.get<{ jobs: Job[] }>('/jobs', { params: { limit } })
+    return data.jobs
+  },
+
+  async getById(id: string): Promise<Job> {
+    const { data } = await api.get<Job>(`/jobs/${id}`)
+    return data
+  },
+}
