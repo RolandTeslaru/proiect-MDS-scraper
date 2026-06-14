@@ -32,7 +32,7 @@ const Anchor: PopoverComponents.Anchor = (props) => {
 }
 
 const Trigger: PopoverComponents.Trigger = ({
-  ref, children, icon, disableStyling, ...rest
+  ref, children, ...rest
 }) => {
   return (
     <PopoverPrimitive.Trigger
