@@ -1,5 +1,5 @@
 import { DatabaseManager, db, getDatabasePath, databaseManager } from "./db/client";
-import { AnalysisJobRepository, analysisJobRepository, createAnalysisJob } from "./db/jobs";
+import { AnalysisJobRepository, analysisJobRepository, createAnalysisJob, updateJobResult, listJobs, getJobById } from "./db/jobs";
 import {
   ScrapeRepository,
   getScrapeRunById,
@@ -43,6 +43,9 @@ export {
   analysisJobRepository,
   backendDatabase,
   createAnalysisJob,
+  updateJobResult,
+  listJobs,
+  getJobById,
   db,
   getDatabasePath,
   getScrapeRunById,
@@ -59,3 +62,4 @@ export type {
   TikTokComment,
   TikTokVideo,
 } from "./db/types";
+export type { AnalysisJob, JobStatus, Verdict } from "./db/jobs";

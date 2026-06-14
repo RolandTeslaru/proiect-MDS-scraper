@@ -5,6 +5,8 @@ import {
   getScrapeRunById,
   listScrapeRuns,
   saveScrapeResult,
+  listJobs,
+  getJobById,
 } from "./db";
 import { normalizeSearchResult } from "./normalizeSearchResult";
 import { addJob } from "./queue";
@@ -37,6 +39,21 @@ app.get("/api/scrapes/:id", (req, res) => {
   }
 
   res.json(scrapeRun);
+});
+
+app.get("/api/jobs", (req, res) => {
+  const limit = Number(req.query.limit ?? 50);
+  const jobs = listJobs(Number.isFinite(limit) ? limit : 50);
+  res.json({ jobs });
+});
+
+app.get("/api/jobs/:id", (req, res) => {
+  const job = getJobById(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  res.json(job);
 });
 
 app.post("/api/analyze", async (req, res) => {
