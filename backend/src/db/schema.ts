@@ -32,7 +32,12 @@ export function initializeSchema(db: Database.Database) {
       id TEXT PRIMARY KEY,
       source_url TEXT NOT NULL,
       status TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      verdict TEXT,
+      confidence REAL,
+      processed_at TEXT,
+      evidence TEXT,
+      reasons TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_scrape_runs_created_at

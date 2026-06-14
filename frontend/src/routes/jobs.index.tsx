@@ -1,18 +1,21 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Card } from '../components/ui/foundations/card'
 import { StatusBadge, VerdictBadge, ConfidenceBar, formatTime } from '../components/badges'
-import { MOCK_JOBS } from '../data/mockJobs'
+import { jobsService } from '../utils/api'
 
 export const Route = createFileRoute('/jobs/')({
+  loader: () => jobsService.list(),
   component: JobsList,
 })
 
 function JobsList() {
-  const total       = MOCK_JOBS.length
-  const disinfo     = MOCK_JOBS.filter(j => j.verdict === 'disinformation').length
-  const authentic   = MOCK_JOBS.filter(j => j.verdict === 'authentic').length
-  const inProgress  = MOCK_JOBS.filter(j => j.status === 'processing' || j.status === 'pending').length
-  const failed      = MOCK_JOBS.filter(j => j.status === 'failed').length
+  const jobs = Route.useLoaderData()
+
+  const total       = jobs.length
+  const disinfo     = jobs.filter(j => j.verdict === 'disinformation').length
+  const authentic   = jobs.filter(j => j.verdict === 'authentic').length
+  const inProgress  = jobs.filter(j => j.status === 'processing' || j.status === 'pending').length
+  const failed      = jobs.filter(j => j.status === 'failed').length
 
   return (
     <div>
@@ -50,15 +53,15 @@ function JobsList() {
               </tr>
             </thead>
             <tbody>
-              {MOCK_JOBS.map((job, i) => (
+              {jobs.map((job, i) => (
                 <tr
                   key={job.id}
-                  className={`border-b border-border transition-colors hover:bg-muted/30 ${i === MOCK_JOBS.length - 1 ? 'border-b-0' : ''}`}
+                  className={`border-b border-border transition-colors hover:bg-muted/30 ${i === jobs.length - 1 ? 'border-b-0' : ''}`}
                 >
                   <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{job.id}</td>
                   <td className="max-w-[200px] px-5 py-3">
-                    <span className="block truncate font-mono text-xs text-muted-foreground" title={job.url}>
-                      {job.url.replace('https://', '')}
+                    <span className="block truncate font-mono text-xs text-muted-foreground" title={job.sourceUrl}>
+                      {job.sourceUrl.replace('https://', '')}
                     </span>
                   </td>
                   <td className="px-5 py-3"><StatusBadge status={job.status} /></td>
@@ -68,7 +71,7 @@ function JobsList() {
                       ? <ConfidenceBar confidence={job.confidence} verdict={job.verdict} />
                       : <span className="text-sm text-muted-foreground">—</span>}
                   </td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground">{formatTime(job.submittedAt)}</td>
+                  <td className="px-5 py-3 text-xs text-muted-foreground">{formatTime(job.createdAt)}</td>
                   <td className="px-5 py-3">
                     <Link
                       to="/jobs/$id"

@@ -3,28 +3,15 @@ import { Card } from '../components/ui/foundations/card'
 import { Button } from '../components/ui/foundations/button'
 import { Badge } from '../components/ui/foundations/Badge'
 import { ConfidenceBar, formatTime } from '../components/badges'
-import { MOCK_JOBS } from '../data/mockJobs'
+import { jobsService } from '../utils/api'
 
 export const Route = createFileRoute('/jobs/$id')({
+  loader: ({ params }) => jobsService.getById(params.id),
   component: JobDetail,
 })
 
 function JobDetail() {
-  const { id } = Route.useParams()
-  const job = MOCK_JOBS.find(j => j.id === id)
-
-  if (!job) {
-    return (
-      <div className="flex flex-col items-center gap-4 py-20 text-center">
-        <div className="text-4xl">🔍</div>
-        <h2 className="text-lg font-semibold text-foreground">Job not found</h2>
-        <p className="text-sm text-muted-foreground">No analysis job with ID <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{id}</code> exists.</p>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/jobs">← Back to All Jobs</Link>
-        </Button>
-      </div>
-    )
-  }
+  const job = Route.useLoaderData()
 
   const isDisinfo  = job.verdict === 'disinformation'
   const isAuth     = job.verdict === 'authentic'
@@ -44,7 +31,7 @@ function JobDetail() {
       {/* Page title */}
       <div className="mb-6">
         <h1 className="mb-1 text-xl font-semibold tracking-tight text-foreground">Analysis Detail</h1>
-        <p className="max-w-full truncate font-mono text-xs text-muted-foreground">{job.url}</p>
+        <p className="max-w-full truncate font-mono text-xs text-muted-foreground">{job.sourceUrl}</p>
       </div>
 
       {/* Verdict hero */}
@@ -137,7 +124,7 @@ function JobDetail() {
             <ol className="flex flex-col gap-4">
               <TimelineStep
                 label="Submitted"
-                time={formatTime(job.submittedAt)}
+                time={formatTime(job.createdAt)}
                 done
               />
               <TimelineStep
@@ -171,7 +158,7 @@ function JobDetail() {
               {job.status}
             </Badge>
           </Meta>
-          <Meta label="Submitted" value={formatTime(job.submittedAt)} />
+          <Meta label="Submitted" value={formatTime(job.createdAt)} />
           {job.processedAt && <Meta label="Processed" value={formatTime(job.processedAt)} />}
         </Card.Content>
       </Card.Root>
