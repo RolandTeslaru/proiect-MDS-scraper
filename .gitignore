@@ -6,3 +6,6 @@ dist
 .DS_Store
 tiktok_session/
 tiktok_session
+backend/data/*.sqlite
+backend/data/*.sqlite-shm
+backend/data/*.sqlite-wal

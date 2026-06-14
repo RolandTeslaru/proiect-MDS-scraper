@@ -1,5 +1,12 @@
 import express from "express";
 import cors from "cors";
+import {
+  getDatabasePath,
+  getScrapeRunById,
+  listScrapeRuns,
+  saveScrapeResult,
+} from "./db";
+import { normalizeSearchResult } from "./normalizeSearchResult";
 import { addJob } from "./queue";
 
 const WORKER_URL = process.env.WORKER_URL ?? "http://localhost:3002";
@@ -9,12 +16,28 @@ app.use(cors({ origin: true }));
 app.use(express.json());
 
 const sendHealth = (_req: express.Request, res: express.Response) => {
-  res.json({ ok: true });
-  console.log("[backend] Health check OK")
+  res.json({ ok: true, databasePath: getDatabasePath() });
+  console.log("[backend] Health check OK");
 };
 
 app.get("/health", sendHealth);
 app.get("/api/health", sendHealth);
+
+app.get("/api/scrapes", (req, res) => {
+  const limit = Number(req.query.limit ?? 20);
+  const scrapes = listScrapeRuns(Number.isFinite(limit) ? limit : 20);
+  res.json({ scrapes });
+});
+
+app.get("/api/scrapes/:id", (req, res) => {
+  const scrapeRun = getScrapeRunById(req.params.id);
+  if (!scrapeRun) {
+    res.status(404).json({ error: "Scrape run not found" });
+    return;
+  }
+
+  res.json(scrapeRun);
+});
 
 app.post("/api/analyze", async (req, res) => {
   const { url } = req.body;
@@ -25,9 +48,9 @@ app.post("/api/analyze", async (req, res) => {
 
   try {
     const jobId = await addJob(url);
-    res.status(202).json({ 
-        message: "Video added to processing queue", 
-        jobId 
+    res.status(202).json({
+      message: "Video added to processing queue",
+      jobId,
     });
   } catch (error) {
     console.error("[backend] Error queuing job:", error);
@@ -56,8 +79,13 @@ app.post("/api/search", async (req, res) => {
       return;
     }
 
-    const data = await response.json();
-    res.json(data);
+    const data = normalizeSearchResult(await response.json());
+    const savedRun = saveScrapeResult(query.trim(), data);
+    res.json({
+      ...data,
+      runId: savedRun.id,
+      savedAt: savedRun.createdAt,
+    });
   } catch (error) {
     console.error("[backend] Search error:", error);
     res.status(500).json({ error: "Failed to contact worker" });
