@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./client";
-import type { ScrapeRunSummary, SearchResult, StoredScrapeRun } from "./types";
+import type {
+  ScrapeRunSummary,
+  SearchResult,
+  StoredComment,
+  StoredScrapeRun,
+} from "./types";
 
 type RunRow = {
   id: string;
@@ -166,6 +171,37 @@ export class ScrapeRepository {
       })),
     };
   }
+
+  /**
+   * Returns the scraped comments for a given video URL, taken from the most
+   * recent scrape of that URL. Jobs and scrapes are linked only by source URL,
+   * so this lets a job detail page show the comments the agent analyzed.
+   */
+  getCommentsBySourceUrl(sourceUrl: string): StoredComment[] {
+    const rows = db
+      .prepare(
+        `
+          SELECT id, author, text, likes, position
+          FROM scraped_comments
+          WHERE video_id = (
+            SELECT id FROM scraped_videos
+            WHERE source_url = ?
+            ORDER BY datetime(created_at) DESC
+            LIMIT 1
+          )
+          ORDER BY position ASC
+        `,
+      )
+      .all(sourceUrl) as CommentRow[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      author: row.author,
+      text: row.text,
+      likes: row.likes,
+      position: row.position,
+    }));
+  }
 }
 
 export const scrapeRepository = new ScrapeRepository();
@@ -180,4 +216,8 @@ export function listScrapeRuns(limit = 20) {
 
 export function getScrapeRunById(id: string) {
   return scrapeRepository.getScrapeRunById(id);
+}
+
+export function getCommentsBySourceUrl(sourceUrl: string) {
+  return scrapeRepository.getCommentsBySourceUrl(sourceUrl);
 }
