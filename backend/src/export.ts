@@ -3,8 +3,41 @@ import type { AnalysisJob, StoredScrapeRun } from "./db";
 
 export type ExportFormat = "json" | "csv";
 
+function stringifyCsvValue(value: unknown): string {
+  if (value == null) {
+    return "";
+  }
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+
+  if (Array.isArray(value) || typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function formatReasonsForCsv(value: unknown): string {
+  if (value == null) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => stringifyCsvValue(item)).join(" | ");
+  }
+
+  return stringifyCsvValue(value);
+}
+
 function escapeCsvValue(value: unknown): string {
-  const normalized = value == null ? "" : String(value);
+  const normalized = stringifyCsvValue(value);
   const escaped = normalized.replaceAll('"', '""');
   return `"${escaped}"`;
 }
@@ -128,8 +161,8 @@ export function serializeJobsCsv(jobs: AnalysisJob[]): string {
     verdict: job.verdict,
     confidence: job.confidence,
     processedAt: job.processedAt,
-    evidence: job.evidence,
-    reasons: job.reasons?.join(" | ") ?? "",
+    evidence: stringifyCsvValue(job.evidence),
+    reasons: formatReasonsForCsv(job.reasons),
   }));
 
   return rowsToCsv(headers, rows);
