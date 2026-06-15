@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { Card } from '../components/ui/foundations/card'
 import { Button } from '../components/ui/foundations/button'
 import { Input } from '../components/ui/foundations/input'
 import { Skeleton } from '../components/ui/foundations/skeleton'
 import { StatusBadge, VerdictBadge, ConfidenceBar, formatTime } from '../components/badges'
-import { jobsService, analysisService, type Job, type JobStatus, type Verdict } from '../utils/api'
+import { jobsService, analysisService, type JobStatus, type Verdict } from '../utils/api'
 
 export const Route = createFileRoute('/jobs/')({
   loader: () => jobsService.list(),
@@ -24,17 +24,22 @@ function JobsList() {
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'all'>('all')
   const [verdictFilter, setVerdictFilter] = useState<Verdict | 'all'>('all')
 
-  const filtered = jobs.filter(j => {
-    if (statusFilter !== 'all' && j.status !== statusFilter) return false
-    if (verdictFilter !== 'all' && j.verdict !== verdictFilter) return false
-    return true
-  })
+  const filtered = useMemo(
+    () => jobs.filter(j => {
+      if (statusFilter !== 'all' && j.status !== statusFilter) return false
+      if (verdictFilter !== 'all' && j.verdict !== verdictFilter) return false
+      return true
+    }),
+    [jobs, statusFilter, verdictFilter],
+  )
 
-  const total      = jobs.length
-  const disinfo    = jobs.filter(j => j.verdict === 'disinformation').length
-  const authentic  = jobs.filter(j => j.verdict === 'authentic').length
-  const inProgress = jobs.filter(j => j.status === 'processing' || j.status === 'pending').length
-  const failed     = jobs.filter(j => j.status === 'failed').length
+  const { total, disinfo, authentic, inProgress, failed } = useMemo(() => ({
+    total:      jobs.length,
+    disinfo:    jobs.filter(j => j.verdict === 'disinformation').length,
+    authentic:  jobs.filter(j => j.verdict === 'authentic').length,
+    inProgress: jobs.filter(j => j.status === 'processing' || j.status === 'pending').length,
+    failed:     jobs.filter(j => j.status === 'failed').length,
+  }), [jobs])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
