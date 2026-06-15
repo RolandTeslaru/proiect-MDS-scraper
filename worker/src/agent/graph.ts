@@ -44,13 +44,6 @@ const AgentState = Annotation.Root({
   }),
 });
 
-const llm = new ChatOpenAI({
-  model: "gpt-4o",
-  temperature: 0,
-}).bindTools(allTools);
-
-const toolNode = new ToolNode(allTools);
-
 function shouldContinue(state: typeof AgentState.State) {
   const last = state.messages.at(-1);
   if (!last) return "__end__";
@@ -58,27 +51,65 @@ function shouldContinue(state: typeof AgentState.State) {
   return msg.tool_calls && msg.tool_calls.length > 0 ? "tools" : "__end__";
 }
 
-const graph = new StateGraph(AgentState)
-  .addNode("agent", async (state) => {
-    const step = state.messages.length;
-    log.agent(`step ${step} — invoking LLM`);
-    const response = await llm.invoke(state.messages);
-    const msg = response as BaseMessage & { tool_calls?: { name: string }[] };
-    if (msg.tool_calls?.length) {
-      log.agent(`step ${step} — calling tools: ${msg.tool_calls.map(t => t.name).join(", ")}`);
-    } else {
-      log.agent(`step ${step} — final answer`);
+export function parseScrapeResultFromAgentOutput(text: string): ScrapeResult {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return { videos: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as Partial<ScrapeResult>;
+    if (!parsed || !Array.isArray(parsed.videos)) {
+      return { videos: [] };
     }
-    return { messages: [response] };
-  })
-  .addNode("tools", toolNode)
-  .addEdge("__start__", "agent")
-  .addConditionalEdges("agent", shouldContinue, {
-    tools: "tools",
-    __end__: "__end__",
-  })
-  .addEdge("tools", "agent")
-  .compile();
+
+    return parsed as ScrapeResult;
+  } catch {
+    return { videos: [] };
+  }
+}
+
+function createGraph() {
+  const llm = new ChatOpenAI({
+    model: "gpt-4o",
+    temperature: 0,
+  }).bindTools(allTools);
+  const toolNode = new ToolNode(allTools);
+
+  return new StateGraph(AgentState)
+    .addNode("agent", async (state) => {
+      const step = state.messages.length;
+      log.agent(`step ${step} — invoking LLM`);
+      const response = await llm.invoke(state.messages);
+      const msg = response as BaseMessage & { tool_calls?: { name: string }[] };
+      if (msg.tool_calls?.length) {
+        log.agent(
+          `step ${step} — calling tools: ${msg.tool_calls.map((t) => t.name).join(", ")}`,
+        );
+      } else {
+        log.agent(`step ${step} — final answer`);
+      }
+      return { messages: [response] };
+    })
+    .addNode("tools", toolNode)
+    .addEdge("__start__", "agent")
+    .addConditionalEdges("agent", shouldContinue, {
+      tools: "tools",
+      __end__: "__end__",
+    })
+    .addEdge("tools", "agent")
+    .compile();
+}
+
+let graph: ReturnType<typeof createGraph> | undefined;
+
+function getGraph() {
+  if (!graph) {
+    graph = createGraph();
+  }
+
+  return graph;
+}
 
 export async function runScrapeAgent(query: string): Promise<ScrapeResult> {
   log.info(`Agent started — query: "${query}"`);
@@ -86,7 +117,7 @@ export async function runScrapeAgent(query: string): Promise<ScrapeResult> {
   setActivePage(page);
 
   try {
-    const result = await graph.invoke({
+    const result = await getGraph().invoke({
       messages: [
         new SystemMessage(SYSTEM_PROMPT),
         new HumanMessage(query),
@@ -95,9 +126,7 @@ export async function runScrapeAgent(query: string): Promise<ScrapeResult> {
 
     const last = result.messages.at(-1);
     const text = last?.content?.toString() ?? "{}";
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed: ScrapeResult = jsonMatch ? JSON.parse(jsonMatch[0]) : { videos: [] };
+    const parsed = parseScrapeResultFromAgentOutput(text);
     log.ok(`Agent done — ${parsed.videos.length} videos returned`);
     return parsed;
   } finally {
