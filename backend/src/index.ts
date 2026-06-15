@@ -7,6 +7,7 @@ import {
   saveScrapeResult,
   listJobs,
   getJobById,
+  getCommentsBySourceUrl,
 } from "./db";
 import { normalizeSearchResult } from "./normalizeSearchResult";
 import { addJob } from "./queue";
@@ -53,7 +54,8 @@ app.get("/api/jobs/:id", (req, res) => {
     res.status(404).json({ error: "Job not found" });
     return;
   }
-  res.json(job);
+  const comments = getCommentsBySourceUrl(job.sourceUrl);
+  res.json({ ...job, comments });
 });
 
 app.post("/api/analyze", async (req, res) => {

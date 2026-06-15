@@ -155,6 +155,42 @@ function JobDetail() {
         </Card.Root>
       </div>
 
+      {/* Scraped comments */}
+      <Card.Root className="mb-4">
+        <Card.Header className="flex flex-row items-center justify-between border-b border-border pb-3">
+          <Card.Title className="text-sm">Scraped Comments</Card.Title>
+          <span className="text-xs text-muted-foreground">{job.comments.length}</span>
+        </Card.Header>
+        <Card.Content className="pt-3">
+          {job.comments.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No comments were scraped for this video.
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {job.comments.map(comment => (
+                <li key={comment.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-muted-foreground">
+                    {comment.author.replace(/^@/, '').charAt(0) || '?'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-xs font-semibold text-foreground">{comment.author}</span>
+                      {comment.likes && (
+                        <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                          <HeartIcon /> {comment.likes}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 break-words text-sm text-foreground">{comment.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card.Content>
+      </Card.Root>
+
       {/* Metadata strip */}
       <Card.Root>
         <Card.Content className="flex flex-wrap gap-6 py-3">
@@ -195,6 +231,14 @@ function TimelineStep({ label, time, done }: { label: string; time: string; done
         <div className="text-xs text-muted-foreground">{time}</div>
       </div>
     </li>
+  )
+}
+
+function HeartIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+    </svg>
   )
 }
 

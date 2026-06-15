@@ -72,14 +72,26 @@ export interface Job {
   reasons: string[] | null
 }
 
+export interface JobComment {
+  id: string
+  author: string
+  text: string
+  likes: string
+  position: number
+}
+
+export interface JobDetail extends Job {
+  comments: JobComment[]
+}
+
 export const jobsService = {
   async list(limit = 50): Promise<Job[]> {
     const { data } = await api.get<{ jobs: Job[] }>('/jobs', { params: { limit } })
     return data.jobs
   },
 
-  async getById(id: string): Promise<Job> {
-    const { data } = await api.get<Job>(`/jobs/${id}`)
+  async getById(id: string): Promise<JobDetail> {
+    const { data } = await api.get<JobDetail>(`/jobs/${id}`)
     return data
   },
 }

@@ -2,6 +2,7 @@ import { DatabaseManager, db, getDatabasePath, databaseManager } from "./db/clie
 import { AnalysisJobRepository, analysisJobRepository, createAnalysisJob, updateJobResult, listJobs, getJobById } from "./db/jobs";
 import {
   ScrapeRepository,
+  getCommentsBySourceUrl,
   getScrapeRunById,
   listScrapeRuns,
   saveScrapeResult,
@@ -47,6 +48,7 @@ export {
   listJobs,
   getJobById,
   db,
+  getCommentsBySourceUrl,
   getDatabasePath,
   getScrapeRunById,
   listScrapeRuns,
