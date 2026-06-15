@@ -9,7 +9,6 @@ import {
   getJobById,
 } from "./db";
 import { normalizeSearchResult } from "./normalizeSearchResult";
-import { addJob } from "./queue";
 
 const WORKER_URL = process.env.WORKER_URL ?? "http://localhost:3002";
 
@@ -63,16 +62,11 @@ app.post("/api/analyze", async (req, res) => {
     return res.status(400).json({ error: "TikTok URL is required" });
   }
 
-  try {
-    const jobId = await addJob(url);
-    res.status(202).json({
-      message: "Video added to processing queue",
-      jobId,
-    });
-  } catch (error) {
-    console.error("[backend] Error queuing job:", error);
-    res.status(500).json({ error: "Failed to process request" });
-  }
+  res.status(501).json({
+    error:
+      "Video analysis is not configured yet. This endpoint is disabled until the processing pipeline is implemented.",
+    url,
+  });
 });
 
 // POST /api/search  { "query": "climate change" }

@@ -33,7 +33,7 @@ The backend then downloads the MP4 through a provider and forwards it to **Googl
 
 ```
 frontend/   Vite + React + TanStack Router   (port 5173)
-backend/    Express API                       (port 3001)
+backend/    Express API                       (port 3003)
 worker/     Express + Playwright              (port 3002)
 ```
 
@@ -50,4 +50,6 @@ cd worker && npm run dev
 
 Or from the repo root: `npm run dev:frontend`, `npm run dev:backend`, `npm run dev:worker`.
 
-The Vite dev server proxies `/api/*` → `http://localhost:3001` (backend). The backend talks to the worker over HTTP (or a queue — to be decided).
+The Vite dev server proxies `/api/*` → `http://localhost:3003` (backend). The backend talks to the worker over HTTP.
+
+Set `PLAYWRIGHT_HEADLESS=true` when running the worker in a server environment.
