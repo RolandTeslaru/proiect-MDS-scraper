@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test": "node --import tsx --test src/**/*.test.ts",
     "login": "tsx src/login.ts",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
