@@ -103,6 +103,47 @@ test("serializeJobsCsv joins reasons and keeps empty nullable fields blank", () 
   );
 });
 
+test("serializeJobsCsv keeps evidence and reasons readable for mixed runtime types", () => {
+  const jobs = [
+    {
+      id: "job-3",
+      sourceUrl: "https://tiktok.com/video-3",
+      status: "done",
+      createdAt: "2026-06-15T12:00:00.000Z",
+      verdict: "disinformation",
+      confidence: 0.6,
+      processedAt: "2026-06-15T12:05:00.000Z",
+      evidence: {
+        source: "agent",
+        snippets: ["frame-1", "frame-2"],
+      },
+      reasons: "Manual review requested",
+    },
+    {
+      id: "job-4",
+      sourceUrl: "https://tiktok.com/video-4",
+      status: "failed",
+      createdAt: "2026-06-15T12:10:00.000Z",
+      verdict: null,
+      confidence: null,
+      processedAt: null,
+      evidence: ["first", "second"],
+      reasons: ["Network error", "Retry later"],
+    },
+  ] as unknown as AnalysisJob[];
+
+  const csv = serializeJobsCsv(jobs);
+
+  assert.match(
+    csv,
+    /"job-3","https:\/\/tiktok\.com\/video-3","done","2026-06-15T12:00:00.000Z","disinformation","0.6","2026-06-15T12:05:00.000Z","\{""source"":""agent"",""snippets"":\[""frame-1"",""frame-2""\]\}","Manual review requested"/,
+  );
+  assert.match(
+    csv,
+    /"job-4","https:\/\/tiktok\.com\/video-4","failed","2026-06-15T12:10:00.000Z","","","","\[""first"",""second""\]","Network error \| Retry later"/,
+  );
+});
+
 test("serializeJsonDownload pretty prints JSON", () => {
   const json = serializeJsonDownload({ ok: true, jobs: [{ id: "job-1" }] });
 
