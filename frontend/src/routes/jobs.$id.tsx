@@ -7,8 +7,21 @@ import { jobsService } from '../utils/api'
 
 export const Route = createFileRoute('/jobs/$id')({
   loader: ({ params }) => jobsService.getById(params.id),
+  errorComponent: JobDetailError,
   component: JobDetail,
 })
+
+function JobDetailError() {
+  return (
+    <div className="flex flex-col items-center gap-4 py-20 text-center">
+      <h2 className="text-lg font-semibold text-foreground">Job not found</h2>
+      <p className="text-sm text-muted-foreground">This job does not exist or the backend is unavailable.</p>
+      <Button asChild variant="outline" size="sm">
+        <Link to="/jobs">← Back to All Jobs</Link>
+      </Button>
+    </div>
+  )
+}
 
 function JobDetail() {
   const job = Route.useLoaderData()
