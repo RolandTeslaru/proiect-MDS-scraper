@@ -13,6 +13,7 @@ const USER_DATA_DIR = path.resolve(__dirname, "../../tiktok_session");
 
 const timezoneId =
   Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
+const isHeadless = process.env.PLAYWRIGHT_HEADLESS === "true";
 
 let context: BrowserContext | null = null;
 
@@ -21,7 +22,7 @@ export async function getBrowserContext(): Promise<BrowserContext> {
 
   log.info(`Launching browser (session: ${USER_DATA_DIR})`);
   context = await chromium.launchPersistentContext(USER_DATA_DIR, {
-    headless: false,        // set true for production/Railway
+    headless: isHeadless,
     args: [
       "--disable-blink-features=AutomationControlled",
       "--no-sandbox",

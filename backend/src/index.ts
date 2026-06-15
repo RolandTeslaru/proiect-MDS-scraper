@@ -8,8 +8,14 @@ import {
   listJobs,
   getJobById,
 } from "./db";
+import {
+  parseExportFormat,
+  serializeJobsCsv,
+  serializeJsonDownload,
+  serializeScrapeRunCsv,
+  setDownloadHeaders,
+} from "./export";
 import { normalizeSearchResult } from "./normalizeSearchResult";
-import { addJob } from "./queue";
 
 const WORKER_URL = process.env.WORKER_URL ?? "http://localhost:3002";
 
@@ -41,10 +47,53 @@ app.get("/api/scrapes/:id", (req, res) => {
   res.json(scrapeRun);
 });
 
+app.get("/api/scrapes/:id/export", (req, res) => {
+  const scrapeRun = getScrapeRunById(req.params.id);
+  if (!scrapeRun) {
+    res.status(404).json({ error: "Scrape run not found" });
+    return;
+  }
+
+  const format = parseExportFormat(req.query.format);
+  if (!format) {
+    res.status(400).json({ error: "Export format must be 'json' or 'csv'" });
+    return;
+  }
+
+  setDownloadHeaders(res, `scrape-${scrapeRun.id}`, format);
+  res.send(
+    format === "csv"
+      ? serializeScrapeRunCsv(scrapeRun)
+      : serializeJsonDownload(scrapeRun),
+  );
+});
+
 app.get("/api/jobs", (req, res) => {
   const limit = Number(req.query.limit ?? 50);
   const jobs = listJobs(Number.isFinite(limit) ? limit : 50);
   res.json({ jobs });
+});
+
+app.get("/api/jobs/export", (req, res) => {
+  const limit = Number(req.query.limit ?? 50);
+  const jobs = listJobs(Number.isFinite(limit) ? limit : 50);
+  const format = parseExportFormat(req.query.format);
+
+  if (!format) {
+    res.status(400).json({ error: "Export format must be 'json' or 'csv'" });
+    return;
+  }
+
+  setDownloadHeaders(
+    res,
+    `jobs-${new Date().toISOString().replaceAll(":", "-")}`,
+    format,
+  );
+  res.send(
+    format === "csv"
+      ? serializeJobsCsv(jobs)
+      : serializeJsonDownload({ jobs }),
+  );
 });
 
 app.get("/api/jobs/:id", (req, res) => {
@@ -63,16 +112,11 @@ app.post("/api/analyze", async (req, res) => {
     return res.status(400).json({ error: "TikTok URL is required" });
   }
 
-  try {
-    const jobId = await addJob(url);
-    res.status(202).json({
-      message: "Video added to processing queue",
-      jobId,
-    });
-  } catch (error) {
-    console.error("[backend] Error queuing job:", error);
-    res.status(500).json({ error: "Failed to process request" });
-  }
+  res.status(501).json({
+    error:
+      "Video analysis is not configured yet. This endpoint is disabled until the processing pipeline is implemented.",
+    url,
+  });
 });
 
 // POST /api/search  { "query": "climate change" }

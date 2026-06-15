@@ -1,5 +1,24 @@
 import Database from "better-sqlite3";
 
+function addColumnIfMissing(
+  db: Database.Database,
+  tableName: string,
+  columnName: string,
+  columnDefinition: string,
+) {
+  const columns = db
+    .prepare(`PRAGMA table_info(${tableName})`)
+    .all() as Array<{ name: string }>;
+
+  if (columns.some((column) => column.name === columnName)) {
+    return;
+  }
+
+  db.exec(
+    `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`,
+  );
+}
+
 export function initializeSchema(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS scrape_runs (
@@ -46,5 +65,14 @@ export function initializeSchema(db: Database.Database) {
       ON scraped_videos(scrape_run_id, position);
     CREATE INDEX IF NOT EXISTS idx_scraped_comments_video_id
       ON scraped_comments(video_id, position);
+    CREATE INDEX IF NOT EXISTS idx_analysis_jobs_created_at
+      ON analysis_jobs(created_at DESC);
   `);
+
+  // Upgrade older local databases in place so new job queries do not fail.
+  addColumnIfMissing(db, "analysis_jobs", "verdict", "TEXT");
+  addColumnIfMissing(db, "analysis_jobs", "confidence", "REAL");
+  addColumnIfMissing(db, "analysis_jobs", "processed_at", "TEXT");
+  addColumnIfMissing(db, "analysis_jobs", "evidence", "TEXT");
+  addColumnIfMissing(db, "analysis_jobs", "reasons", "TEXT");
 }
