@@ -1,5 +1,5 @@
 import { Badge } from './ui/foundations/Badge'
-import type { JobStatus, Verdict } from '../data/mockJobs'
+import type { JobStatus, Verdict } from '../utils/api'
 
 export function StatusBadge({ status }: { status: JobStatus }) {
   if (status === 'done')
