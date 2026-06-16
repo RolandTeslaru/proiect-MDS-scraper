@@ -1,5 +1,5 @@
 import { DatabaseManager, db, getDatabasePath, databaseManager } from "./db/client";
-import { AnalysisJobRepository, analysisJobRepository, createAnalysisJob, updateJobResult, listJobs, getJobById } from "./db/jobs";
+import { AnalysisJobRepository, analysisJobRepository, createAnalysisJob, createAnalysisJobIfAbsent, listPendingJobs, updateJobResult, listJobs, getJobById } from "./db/jobs";
 import {
   ScrapeRepository,
   addVideoWithComments,
@@ -48,6 +48,8 @@ export {
   analysisJobRepository,
   backendDatabase,
   createAnalysisJob,
+  createAnalysisJobIfAbsent,
+  listPendingJobs,
   createRun,
   updateJobResult,
   listJobs,

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { runScrapeAgent } from "./agent/graph.js";
+import { runClassifyJob } from "./agent/classifier.js";
 import { log } from "./logger.js";
 
 const app = express();
@@ -33,6 +34,21 @@ app.post("/scrape", async (req, res) => {
     log.error(`POST /scrape failed: ${message}`);
     res.status(500).json({ error: message });
   }
+});
+
+// POST /analyze  { "jobId": "...", "url": "https://tiktok.com/..." }
+// Agent 2: download the video, classify it with Gemini, and post the verdict
+// back to the backend. Responds immediately; classification runs in background.
+app.post("/analyze", (req, res) => {
+  const { jobId, url } = req.body as { jobId?: string; url?: string };
+  if (!jobId || !url) {
+    res.status(400).json({ error: "Missing 'jobId' or 'url' field" });
+    return;
+  }
+
+  log.info(`POST /analyze jobId=${jobId} url=${url}`);
+  res.json({ ok: true, jobId });
+  void runClassifyJob(jobId, url);
 });
 
 const PORT = Number(process.env.PORT ?? 3002);

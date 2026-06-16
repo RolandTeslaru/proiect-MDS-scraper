@@ -53,3 +53,20 @@ Or from the repo root: `npm run dev:frontend`, `npm run dev:backend`, `npm run d
 The Vite dev server proxies `/api/*` → `http://localhost:3003` (backend). The backend talks to the worker over HTTP.
 
 Set `PLAYWRIGHT_HEADLESS=true` when running the worker in a server environment.
+
+### Worker environment
+
+```sh
+# worker/.env
+OPENAI_API_KEY=...                    # scraper agent (Agent 1)
+GOOGLE_API_KEY=...                    # classifier agent (Agent 2, Gemini video)
+GEMINI_MODEL=gemini-2.5-flash-lite    # optional; defaults to this
+PORT=3002
+BACKEND_URL=http://localhost:3003     # optional; defaults to this
+```
+
+The classifier downloads each TikTok video with **yt-dlp** (a system dependency):
+
+```sh
+brew install yt-dlp
+```

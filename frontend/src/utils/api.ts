@@ -94,4 +94,15 @@ export const jobsService = {
     const { data } = await api.get<JobDetail>(`/jobs/${id}`)
     return data
   },
+
+  // Start analyzing an existing (scraped-but-pending) job.
+  async run(id: string): Promise<void> {
+    await api.post(`/jobs/${id}/run`)
+  },
+
+  // Start analyzing every pending job at once.
+  async runPending(): Promise<number> {
+    const { data } = await api.post<{ started: number }>('/jobs/run-pending')
+    return data.started
+  },
 }

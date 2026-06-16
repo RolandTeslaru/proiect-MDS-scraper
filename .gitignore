@@ -9,3 +9,7 @@ tiktok_session
 backend/data/*.sqlite
 backend/data/*.sqlite-shm
 backend/data/*.sqlite-wal
+
+# internal design notes — not for commit
+SPEC_AGENT2.md
+worker/tmp_videos/

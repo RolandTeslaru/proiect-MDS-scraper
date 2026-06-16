@@ -11,6 +11,10 @@ import {
   listJobs,
   getJobById,
   getCommentsBySourceUrl,
+  createAnalysisJob,
+  createAnalysisJobIfAbsent,
+  listPendingJobs,
+  updateJobResult,
 } from "./db";
 import {
   parseExportFormat,
@@ -125,6 +129,23 @@ app.get("/api/jobs/:id", (req, res) => {
   res.json({ ...job, comments });
 });
 
+// Hand a job to the worker's classifier agent (Agent 2). On contact failure,
+// mark the job failed so it doesn't sit "pending" forever.
+async function triggerAnalysis(jobId: string, url: string): Promise<void> {
+  try {
+    await fetch(`${WORKER_URL}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId, url }),
+    });
+  } catch {
+    updateJobResult(jobId, "failed", null, null, "Worker unreachable", null);
+  }
+}
+
+// POST /api/analyze — create a job from a raw URL and start analyzing it.
+// Returns immediately; the worker posts the verdict back to
+// /api/jobs/:id/result once Gemini finishes.
 app.post("/api/analyze", async (req, res) => {
   const { url } = req.body;
 
@@ -132,11 +153,68 @@ app.post("/api/analyze", async (req, res) => {
     return res.status(400).json({ error: "TikTok URL is required" });
   }
 
-  res.status(501).json({
-    error:
-      "Video analysis is not configured yet. This endpoint is disabled until the processing pipeline is implemented.",
-    url,
-  });
+  const jobId = createAnalysisJob(url);
+  await triggerAnalysis(jobId, url);
+  res.status(202).json({ jobId, message: "Analysis started" });
+});
+
+// POST /api/jobs/:id/run — start analyzing an existing (e.g. scraped-but-
+// pending) job, without creating a duplicate.
+app.post("/api/jobs/:id/run", async (req, res) => {
+  const job = getJobById(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  await triggerAnalysis(job.id, job.sourceUrl);
+  res.status(202).json({ jobId: job.id, message: "Analysis started" });
+});
+
+// POST /api/jobs/run-pending — start analyzing every pending job at once.
+app.post("/api/jobs/run-pending", async (_req, res) => {
+  const pending = listPendingJobs();
+  await Promise.all(pending.map((job) => triggerAnalysis(job.id, job.sourceUrl)));
+  res.status(202).json({ started: pending.length });
+});
+
+// POST /api/jobs/:id/result — the worker reports the classifier's verdict here.
+const jobResultSchema = z.object({
+  status: z.enum(["processing", "done", "failed"]),
+  verdict: z.enum(["disinformation", "authentic"]).nullable().default(null),
+  confidence: z.number().min(0).max(1).nullable().default(null),
+  evidence: z.string().nullable().default(null),
+  reasons: z.array(z.string()).nullable().default(null),
+});
+
+app.post("/api/jobs/:id/result", (req, res) => {
+  if (!getJobById(req.params.id)) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+
+  const parsed = jobResultSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "Invalid job result payload",
+      details: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    });
+    return;
+  }
+
+  const { status, verdict, confidence, evidence, reasons } = parsed.data;
+  updateJobResult(req.params.id, status, verdict, confidence, evidence, reasons);
+  res.json({ ok: true });
+});
+
+// GET /api/comments?url=... — the worker reads scraped comments for a video
+// to feed them to the classifier alongside the video itself.
+app.get("/api/comments", (req, res) => {
+  const url = String(req.query.url ?? "");
+  if (!url) {
+    res.status(400).json({ error: "url query parameter is required" });
+    return;
+  }
+  res.json(getCommentsBySourceUrl(url));
 });
 
 // POST /api/scrapes/:runId/videos — called by the worker once per video to
@@ -160,6 +238,9 @@ app.post("/api/scrapes/:runId/videos", (req, res) => {
 
   try {
     const result = addVideoWithComments(runId, parsed.data);
+    // Surface the freshly scraped video in All Jobs as a pending analysis the
+    // user can run on demand (idempotent across re-scrapes of the same URL).
+    createAnalysisJobIfAbsent(parsed.data.url);
     res.json(result);
   } catch (error) {
     console.error("[backend] Failed to save video:", error);

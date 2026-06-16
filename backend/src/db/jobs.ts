@@ -70,6 +70,28 @@ export class AnalysisJobRepository {
     return jobId;
   }
 
+  // Create a pending job for a scraped video only if one doesn't already exist
+  // for that URL, so re-scraping the same video doesn't pile up duplicates.
+  // Returns the job id (existing or new).
+  createAnalysisJobIfAbsent(sourceUrl: string): string {
+    const existing = db
+      .prepare(`SELECT id FROM analysis_jobs WHERE source_url = ? LIMIT 1`)
+      .get(sourceUrl) as { id: string } | undefined;
+    return existing ? existing.id : this.createAnalysisJob(sourceUrl);
+  }
+
+  listPendingJobs(): AnalysisJob[] {
+    const rows = db
+      .prepare(
+        `SELECT id, source_url, status, created_at, verdict, confidence, processed_at, evidence, reasons
+         FROM analysis_jobs
+         WHERE status = 'pending'
+         ORDER BY datetime(created_at) DESC`,
+      )
+      .all() as JobRow[];
+    return rows.map(rowToJob);
+  }
+
   updateJobResult(
     id: string,
     status: JobStatus,
@@ -118,6 +140,14 @@ export const analysisJobRepository = new AnalysisJobRepository();
 
 export function createAnalysisJob(sourceUrl: string) {
   return analysisJobRepository.createAnalysisJob(sourceUrl);
+}
+
+export function createAnalysisJobIfAbsent(sourceUrl: string) {
+  return analysisJobRepository.createAnalysisJobIfAbsent(sourceUrl);
+}
+
+export function listPendingJobs() {
+  return analysisJobRepository.listPendingJobs();
 }
 
 export function updateJobResult(
