@@ -1,10 +1,13 @@
 import express from "express";
 import cors from "cors";
+import { z } from "zod";
 import {
+  addVideoWithComments,
+  createRun,
   getDatabasePath,
   getScrapeRunById,
   listScrapeRuns,
-  saveScrapeResult,
+  runExists,
   listJobs,
   getJobById,
   getCommentsBySourceUrl,
@@ -16,13 +19,28 @@ import {
   serializeScrapeRunCsv,
   setDownloadHeaders,
 } from "./export";
-import { normalizeSearchResult } from "./normalizeSearchResult";
 
 const WORKER_URL = process.env.WORKER_URL ?? "http://localhost:3002";
 
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
+
+// Defensive validation for the per-video save endpoint the worker calls. The
+// worker validates the same shape with zod before sending, but we never trust
+// the network — a bad payload here returns 400 so the agent can correct it.
+const videoPayloadSchema = z.object({
+  url: z.string().min(1, "url is required"),
+  comments: z
+    .array(
+      z.object({
+        author: z.string().default(""),
+        text: z.string().min(1, "comment text is required"),
+        likes: z.string().default("0"),
+      }),
+    )
+    .default([]),
+});
 
 const sendHealth = (_req: express.Request, res: express.Response) => {
   res.json({ ok: true, databasePath: getDatabasePath() });
@@ -121,6 +139,34 @@ app.post("/api/analyze", async (req, res) => {
   });
 });
 
+// POST /api/scrapes/:runId/videos — called by the worker once per video to
+// persist results incrementally as the agent scrapes them.
+app.post("/api/scrapes/:runId/videos", (req, res) => {
+  const { runId } = req.params;
+
+  if (!runExists(runId)) {
+    res.status(404).json({ error: "Scrape run not found" });
+    return;
+  }
+
+  const parsed = videoPayloadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "Invalid video payload",
+      details: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    });
+    return;
+  }
+
+  try {
+    const result = addVideoWithComments(runId, parsed.data);
+    res.json(result);
+  } catch (error) {
+    console.error("[backend] Failed to save video:", error);
+    res.status(500).json({ error: "Failed to save video" });
+  }
+});
+
 // POST /api/search  { "query": "climate change" }
 app.post("/api/search", async (req, res) => {
   const { query } = req.body as { query?: string };
@@ -129,29 +175,33 @@ app.post("/api/search", async (req, res) => {
     return;
   }
 
+  // Create the run up front so the worker's agent can save videos into it
+  // incrementally (one HTTP call per video) while the scrape is running.
+  const run = createRun(query.trim());
+
   try {
     const response = await fetch(`${WORKER_URL}/scrape`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query: query.trim(), runId: run.id }),
     });
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      res.status(502).json({ error: "Worker error", details: err });
+      // The agent may still have saved some videos before failing — return
+      // whatever made it into the DB rather than nothing.
+      const partial = getScrapeRunById(run.id);
+      res.status(502).json({ error: "Worker error", details: err, run: partial });
       return;
     }
 
-    const data = normalizeSearchResult(await response.json());
-    const savedRun = saveScrapeResult(query.trim(), data);
-    res.json({
-      ...data,
-      runId: savedRun.id,
-      savedAt: savedRun.createdAt,
-    });
+    // Read the run back from the DB — it now holds everything the agent saved.
+    const savedRun = getScrapeRunById(run.id);
+    res.json({ ...savedRun, runId: run.id });
   } catch (error) {
     console.error("[backend] Search error:", error);
-    res.status(500).json({ error: "Failed to contact worker" });
+    const partial = getScrapeRunById(run.id);
+    res.status(500).json({ error: "Failed to contact worker", run: partial });
   }
 });
 

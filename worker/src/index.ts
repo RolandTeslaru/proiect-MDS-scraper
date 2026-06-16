@@ -11,19 +11,23 @@ app.get("/health", (_req, res) => {
   log.info("health check");
 });
 
-// POST /scrape  { "query": "climate change" }
+// POST /scrape  { "query": "climate change", "runId": "..." }
 app.post("/scrape", async (req, res) => {
-  const { query } = req.body as { query?: string };
+  const { query, runId } = req.body as { query?: string; runId?: string };
   if (!query) {
     res.status(400).json({ error: "Missing 'query' field" });
     return;
   }
+  if (!runId) {
+    res.status(400).json({ error: "Missing 'runId' field" });
+    return;
+  }
 
-  log.info(`POST /scrape query="${query}"`);
+  log.info(`POST /scrape query="${query}" runId=${runId}`);
   try {
-    const result = await runScrapeAgent(query);
-    log.ok(`POST /scrape → ${result.videos.length} videos`);
-    res.json(result);
+    await runScrapeAgent(query, runId);
+    log.ok(`POST /scrape → done (run ${runId})`);
+    res.json({ ok: true, runId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error(`POST /scrape failed: ${message}`);
