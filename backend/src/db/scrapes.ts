@@ -5,6 +5,7 @@ import type {
   SearchResult,
   StoredComment,
   StoredScrapeRun,
+  TikTokVideo,
 } from "./types";
 
 type RunRow = {
@@ -44,6 +45,29 @@ export class ScrapeRepository {
     INSERT INTO scraped_comments (id, video_id, author, text, likes, position)
     VALUES (@id, @videoId, @author, @text, @likes, @position)
   `);
+
+  private readonly runExistsStmt = db.prepare(
+    `SELECT 1 FROM scrape_runs WHERE id = ?`,
+  );
+
+  // Remove any existing video for this run+url so re-saving the same video
+  // (e.g. after the agent retries) overwrites instead of duplicating. The
+  // FK cascade deletes that video's comments too.
+  private readonly deleteVideoByRunAndUrl = db.prepare(
+    `DELETE FROM scraped_videos WHERE scrape_run_id = ? AND source_url = ?`,
+  );
+
+  private readonly countVideosInRun = db.prepare(
+    `SELECT COUNT(*) AS count FROM scraped_videos WHERE scrape_run_id = ?`,
+  );
+
+  private readonly updateVideoCount = db.prepare(
+    `UPDATE scrape_runs
+       SET video_count = (
+         SELECT COUNT(*) FROM scraped_videos WHERE scrape_run_id = @runId
+       )
+     WHERE id = @runId`,
+  );
 
   saveScrapeResult(query: string, result: SearchResult): ScrapeRunSummary {
     const runId = randomUUID();
@@ -87,6 +111,66 @@ export class ScrapeRepository {
       query,
       createdAt,
       videoCount: result.videos.length,
+    };
+  }
+
+  /** Create an empty run up front; videos are added incrementally afterwards. */
+  createRun(query: string): ScrapeRunSummary {
+    const runId = randomUUID();
+    const createdAt = new Date().toISOString();
+    this.insertRun.run({ id: runId, query, createdAt, videoCount: 0 });
+    return { id: runId, query, createdAt, videoCount: 0 };
+  }
+
+  runExists(runId: string): boolean {
+    return this.runExistsStmt.get(runId) !== undefined;
+  }
+
+  /**
+   * Save one video and its comments into an existing run. Idempotent per
+   * (runId, url): re-saving the same video replaces the previous version
+   * instead of creating duplicates. Returns the new video count for the run.
+   */
+  addVideoWithComments(
+    runId: string,
+    video: TikTokVideo,
+  ): { videoId: string; savedComments: number; videoCount: number } {
+    const videoId = randomUUID();
+    const createdAt = new Date().toISOString();
+
+    const transaction = db.transaction(() => {
+      this.deleteVideoByRunAndUrl.run(runId, video.url);
+
+      const { count } = this.countVideosInRun.get(runId) as { count: number };
+      this.insertVideo.run({
+        id: videoId,
+        scrapeRunId: runId,
+        sourceUrl: video.url,
+        position: count,
+        createdAt,
+      });
+
+      video.comments.forEach((comment, commentIndex) => {
+        this.insertComment.run({
+          id: randomUUID(),
+          videoId,
+          author: comment.author,
+          text: comment.text,
+          likes: comment.likes,
+          position: commentIndex,
+        });
+      });
+
+      this.updateVideoCount.run({ runId });
+    });
+
+    transaction();
+
+    const { count } = this.countVideosInRun.get(runId) as { count: number };
+    return {
+      videoId,
+      savedComments: video.comments.length,
+      videoCount: count,
     };
   }
 
@@ -208,6 +292,18 @@ export const scrapeRepository = new ScrapeRepository();
 
 export function saveScrapeResult(query: string, result: SearchResult) {
   return scrapeRepository.saveScrapeResult(query, result);
+}
+
+export function createRun(query: string) {
+  return scrapeRepository.createRun(query);
+}
+
+export function runExists(runId: string) {
+  return scrapeRepository.runExists(runId);
+}
+
+export function addVideoWithComments(runId: string, video: TikTokVideo) {
+  return scrapeRepository.addVideoWithComments(runId, video);
 }
 
 export function listScrapeRuns(limit = 20) {

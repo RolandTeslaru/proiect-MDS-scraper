@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type Database from "better-sqlite3";
-import type { AnalysisJob } from "./jobs";
+import type { AnalysisJob, JobStatus, Verdict } from "./jobs";
 
 const tempDirectory = mkdtempSync(join(tmpdir(), "mds-jobs-"));
 const databasePath = join(tempDirectory, "jobs.sqlite");
@@ -13,6 +13,15 @@ const originalSqlitePath = process.env.SQLITE_PATH;
 let db: Database.Database;
 let createAnalysisJob: (sourceUrl: string) => string;
 let listJobs: (limit?: number) => AnalysisJob[];
+let updateJobResult: (
+  id: string,
+  status: JobStatus,
+  verdict: Verdict,
+  confidence: number | null,
+  evidence: string | null,
+  reasons: string[] | null,
+) => void;
+let getJobById: (id: string) => AnalysisJob | null;
 
 before(async () => {
   process.env.SQLITE_PATH = databasePath;
@@ -23,6 +32,8 @@ before(async () => {
   db = clientModule.db;
   createAnalysisJob = jobsModule.createAnalysisJob;
   listJobs = jobsModule.listJobs;
+  updateJobResult = jobsModule.updateJobResult;
+  getJobById = jobsModule.getJobById;
 });
 
 beforeEach(() => {
@@ -55,6 +66,32 @@ test("createAnalysisJob persists a pending job that listJobs returns", () => {
   assert.equal(jobs[0]?.processedAt, null);
   assert.equal(jobs[0]?.evidence, null);
   assert.equal(jobs[0]?.reasons, null);
+});
+
+test("updateJobResult stores the classifier verdict and round-trips reasons", () => {
+  const jobId = createAnalysisJob("https://www.tiktok.com/@user/video/42");
+
+  updateJobResult(
+    jobId,
+    "done",
+    "disinformation",
+    0.92,
+    "On-screen text claims a debunked statistic.",
+    ["fabricated statistic", "no credible source", "emotional manipulation"],
+  );
+
+  const job = getJobById(jobId);
+  assert.ok(job);
+  assert.equal(job?.status, "done");
+  assert.equal(job?.verdict, "disinformation");
+  assert.equal(job?.confidence, 0.92);
+  assert.equal(job?.evidence, "On-screen text claims a debunked statistic.");
+  assert.deepEqual(job?.reasons, [
+    "fabricated statistic",
+    "no credible source",
+    "emotional manipulation",
+  ]);
+  assert.ok(job?.processedAt);
 });
 
 test("listJobs respects the requested limit", () => {

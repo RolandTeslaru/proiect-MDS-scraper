@@ -1,10 +1,13 @@
 import { DatabaseManager, db, getDatabasePath, databaseManager } from "./db/client";
-import { AnalysisJobRepository, analysisJobRepository, createAnalysisJob, updateJobResult, listJobs, getJobById } from "./db/jobs";
+import { AnalysisJobRepository, analysisJobRepository, createAnalysisJob, createAnalysisJobIfAbsent, listPendingJobs, updateJobResult, listJobs, getJobById } from "./db/jobs";
 import {
   ScrapeRepository,
+  addVideoWithComments,
+  createRun,
   getCommentsBySourceUrl,
   getScrapeRunById,
   listScrapeRuns,
+  runExists,
   saveScrapeResult,
   scrapeRepository,
 } from "./db/scrapes";
@@ -41,9 +44,13 @@ export {
   AnalysisJobRepository,
   DatabaseManager,
   ScrapeRepository,
+  addVideoWithComments,
   analysisJobRepository,
   backendDatabase,
   createAnalysisJob,
+  createAnalysisJobIfAbsent,
+  listPendingJobs,
+  createRun,
   updateJobResult,
   listJobs,
   getJobById,
@@ -52,6 +59,7 @@ export {
   getDatabasePath,
   getScrapeRunById,
   listScrapeRuns,
+  runExists,
   saveScrapeResult,
   scrapeRepository,
 };

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { Card } from '../components/ui/foundations/card'
 import { Button } from '../components/ui/foundations/button'
@@ -40,6 +40,42 @@ function JobsList() {
     inProgress: jobs.filter(j => j.status === 'processing' || j.status === 'pending').length,
     failed:     jobs.filter(j => j.status === 'failed').length,
   }), [jobs])
+
+  const pendingCount = useMemo(() => jobs.filter(j => j.status === 'pending').length, [jobs])
+  const hasActiveWork = useMemo(
+    () => jobs.some(j => j.status === 'processing'),
+    [jobs],
+  )
+
+  // Refresh while a classifier is running so verdicts land without a reload.
+  useEffect(() => {
+    if (!hasActiveWork) return
+    const id = setInterval(() => router.invalidate(), 3000)
+    return () => clearInterval(id)
+  }, [hasActiveWork, router])
+
+  const [runningId, setRunningId] = useState<string | null>(null)
+  const [runningAll, setRunningAll] = useState(false)
+
+  async function handleRun(id: string) {
+    setRunningId(id)
+    try {
+      await jobsService.run(id)
+      await router.invalidate()
+    } finally {
+      setRunningId(null)
+    }
+  }
+
+  async function handleRunPending() {
+    setRunningAll(true)
+    try {
+      await jobsService.runPending()
+      await router.invalidate()
+    } finally {
+      setRunningAll(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -99,7 +135,14 @@ function JobsList() {
       {/* Table */}
       <Card.Root>
         <Card.Header className="flex flex-row items-center justify-between border-b border-border">
-          <Card.Title>Jobs</Card.Title>
+          <div className="flex items-center gap-3">
+            <Card.Title>Jobs</Card.Title>
+            {pendingCount > 0 && (
+              <Button size="sm" onClick={handleRunPending} disabled={runningAll}>
+                {runningAll ? 'Starting…' : `Analyze all pending (${pendingCount})`}
+              </Button>
+            )}
+          </div>
           {/* Filters */}
           <div className="flex items-center gap-2">
             <FilterChips
@@ -164,13 +207,24 @@ function JobsList() {
                     </td>
                     <td className="px-5 py-3 text-xs text-muted-foreground">{formatTime(job.createdAt)}</td>
                     <td className="px-5 py-3">
-                      <Link
-                        to="/jobs/$id"
-                        params={{ id: job.id }}
-                        className="text-xs font-medium text-primary hover:underline"
-                      >
-                        View →
-                      </Link>
+                      <div className="flex items-center justify-end gap-3">
+                        {job.status === 'pending' && (
+                          <button
+                            onClick={() => handleRun(job.id)}
+                            disabled={runningId === job.id || runningAll}
+                            className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                          >
+                            {runningId === job.id ? 'Starting…' : 'Analyze'}
+                          </button>
+                        )}
+                        <Link
+                          to="/jobs/$id"
+                          params={{ id: job.id }}
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          View →
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -10,6 +10,19 @@ export function setActivePage(page: Page) {
   activePage = page;
 }
 
+// Run context for the save_video tool — which run to save into, where the
+// backend lives, and how many times each video has been retried.
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:3003";
+const MAX_SAVE_RETRIES = 3;
+
+let activeRunId: string | null = null;
+const saveAttempts = new Map<string, number>();
+
+export function setRunId(runId: string) {
+  activeRunId = runId;
+  saveAttempts.clear();
+}
+
 function page(): Page {
   if (!activePage) throw new Error("No active page — call setActivePage first");
   return activePage;
@@ -26,6 +39,9 @@ export const navigateTo = tool(
       page().waitForSelector("[class*='DivVideoFeed']", { timeout: 10000 }),
       page().waitForTimeout(5000),
     ]).catch(() => {});
+    // TikTok is a heavy SPA — let the network settle so the video page and its
+    // comments actually render before we try to read them.
+    await page().waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
     const title = await page().title();
     log.tool(`navigate_to ← "${title}"`);
     return `Navigated to: ${title}`;
@@ -190,65 +206,167 @@ export const getTikTokVideoLinks = tool(
   }
 );
 
-export const scrapeComments = tool(
-  async ({ maxComments }) => {
-    log.tool(`scrape_comments max=${maxComments}`);
-    // wait for comments section — try multiple selectors TikTok uses
-    const commentSelectors = [
-      "[data-e2e='comment-level-1']",
-      "[data-e2e='comment-list']",
-      "[class*='CommentListContainer']",
-      "[class*='DivCommentItemContainer']",
-    ];
-    for (const sel of commentSelectors) {
-      const found = await page().waitForSelector(sel, { timeout: 6000 }).catch(() => null);
-      if (found) { log.tool(`scrape_comments — found comments via "${sel}"`); break; }
+export const getCommentsHtml = tool(
+  async () => {
+    log.tool(`get_comments_html on ${page().url()}`);
+
+    // On TikTok's short-form video page the comments are hidden until you click
+    // the comment button. Click it to open the panel. Do NOT scroll the page —
+    // a page scroll jumps to the next video.
+    const commentButton = await page()
+      .$("[data-e2e='comment-icon'], [data-e2e='browse-comment'], button[aria-label*='omment']")
+      .catch(() => null);
+    if (commentButton) {
+      log.tool("get_comments_html — clicking comment button to open the panel");
+      await commentButton.click().catch(() => {});
+    } else {
+      log.tool("get_comments_html — comment button not found");
     }
 
-    const comments: { author: string; text: string; likes: string }[] = [];
+    // Wait for the comments to render after opening the panel.
+    await page()
+      .waitForSelector("[data-e2e='comment-level-1']", { timeout: 10000 })
+      .catch(() => {});
 
-    const getVisible = async () => {
-      return await page().evaluate(() => {
-        // try data-e2e selectors first, fall back to class-based
-        const items = [
-          ...document.querySelectorAll("[data-e2e='comment-level-1']"),
-          ...document.querySelectorAll("[class*='DivCommentItemContainer']"),
-        ];
-        const unique = [...new Map(items.map(el => [el.textContent, el])).values()];
-        return unique.map((el) => ({
-          author:
-            (el.querySelector("[data-e2e='comment-username-1']") as HTMLElement)?.innerText ??
-            (el.querySelector("[class*='SpanUniqueId']") as HTMLElement)?.innerText ?? "",
-          text:
-            (el.querySelector("[data-e2e='comment-text']") as HTMLElement)?.innerText ??
-            (el.querySelector("[class*='PCommentText']") as HTMLElement)?.innerText ?? "",
-          likes:
-            (el.querySelector("[data-e2e='comment-like-count']") as HTMLElement)?.innerText ?? "0",
-        })).filter(c => c.text.length > 0);
+    let html = "";
+    let diag = { items: 0, text: 0, bodyLen: 0 };
+    try {
+      // NOTE: keep this callback free of NAMED functions/classes. tsx/esbuild
+      // wraps those in a __name() helper that does not exist in the browser, so
+      // page.evaluate throws "ReferenceError: __name is not defined". Only
+      // anonymous arrow callbacks are safe here.
+      const result = await page().evaluate(() => {
+        // Prefer the stable data-e2e comment items — this gives us ONLY the
+        // comments (no nav/header/recommendations), so nothing useful is lost to
+        // the size cap. Fall back to the whole body if TikTok changed the markup.
+        const items = document.querySelectorAll("[data-e2e='comment-level-1']");
+        const diag = {
+          items: items.length,
+          text: document.querySelectorAll("[data-e2e='comment-text']").length,
+          bodyLen: document.body?.innerText?.length ?? 0,
+        };
+
+        const raw =
+          items.length > 0
+            ? [...items].map((el) => el.outerHTML).join("")
+            : document.body.innerHTML;
+
+        const wrap = document.createElement("div");
+        wrap.innerHTML = raw;
+        wrap
+          .querySelectorAll("script,style,svg,noscript,img,video,canvas,iframe,path,link")
+          .forEach((el) => el.remove());
+        wrap.querySelectorAll("*").forEach((el) => {
+          for (const attr of [...el.attributes]) el.removeAttribute(attr.name);
+        });
+
+        return { html: wrap.innerHTML, diag };
       });
-    };
-
-    let prev = 0;
-    for (let i = 0; i < 8 && comments.length < maxComments; i++) {
-      const batch = await getVisible();
-      for (const c of batch) {
-        if (!comments.find((x) => x.text === c.text)) comments.push(c);
-      }
-      if (comments.length >= maxComments || comments.length === prev) break;
-      prev = comments.length;
-      await page().mouse.wheel(0, 600);
-      await page().waitForTimeout(800 + Math.random() * 400);
+      html = result.html;
+      diag = result.diag;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      log.error(`get_comments_html — evaluate failed: ${message}`);
+      return `Could not read the page (${message}). The page may not have loaded. Save this video with an empty comments array and continue.`;
     }
 
-    const final = comments.slice(0, maxComments);
-    log.tool(`scrape_comments ← ${final.length} comments`);
-    return JSON.stringify(final);
+    log.tool(
+      `get_comments_html diag: comment-level-1=${diag.items}, comment-text=${diag.text}, bodyTextLen=${diag.bodyLen}`,
+    );
+
+    const cleaned = html
+      .replace(/<(\w+)>\s*<\/\1>/g, "") // drop now-empty tags
+      .replace(/\s+/g, " ") // collapse whitespace
+      .trim()
+      .slice(0, 8000); // cap so a huge page can't blow up the context
+
+    if (!cleaned || diag.items + diag.text === 0) {
+      log.tool("get_comments_html ← no comments found");
+      return "No readable comments found for this video. Save it with an empty comments array.";
+    }
+
+    log.tool(
+      `get_comments_html ← ${cleaned.length} chars (${diag.items > 0 ? "comment items" : "body fallback"})`,
+    );
+    return cleaned;
   },
   {
-    name: "scrape_comments",
-    description: "Scrape comments from the current TikTok video page",
+    name: "get_comments_html",
+    description:
+      "Open the current TikTok video's comments and return their sanitized HTML (tags + text only). Read it and extract the comments yourself.",
     schema: z.object({
-      maxComments: z.number().default(20).describe("Max number of comments to return"),
+    }),
+  }
+);
+
+export const saveVideo = tool(
+  async ({ url, comments }) => {
+    log.tool(`save_video → ${url} (${comments.length} comments)`);
+
+    if (!activeRunId) {
+      return "ERROR: no active run. Cannot save — stop and report the problem.";
+    }
+
+    const attempts = (saveAttempts.get(url) ?? 0) + 1;
+    saveAttempts.set(url, attempts);
+
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/scrapes/${activeRunId}/videos`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, comments }),
+        },
+      );
+
+      if (res.ok) {
+        const data = (await res.json()) as { savedComments: number };
+        saveAttempts.delete(url);
+        log.ok(`save_video ← saved ${data.savedComments} comments for ${url}`);
+        return `Saved ${data.savedComments} comments for ${url}.`;
+      }
+
+      // Backend rejected the data (e.g. validation). Tell the agent what was
+      // wrong so it can fix the payload and call save_video again.
+      const err = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        details?: string[];
+      };
+      const reason = err.details?.join("; ") ?? err.error ?? `HTTP ${res.status}`;
+
+      if (attempts >= MAX_SAVE_RETRIES) {
+        saveAttempts.delete(url);
+        log.error(`save_video — giving up on ${url} after ${attempts} tries: ${reason}`);
+        return `Could not save ${url} after ${attempts} attempts (${reason}). Skip this video and continue with the next one.`;
+      }
+
+      log.error(`save_video — backend rejected ${url}: ${reason}`);
+      return `Save failed (${reason}). Fix the data and call save_video again for ${url}.`;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (attempts >= MAX_SAVE_RETRIES) {
+        saveAttempts.delete(url);
+        return `Could not reach the backend for ${url} after ${attempts} attempts (${message}). Skip this video and continue.`;
+      }
+      return `Could not reach the backend (${message}). Call save_video again for ${url}.`;
+    }
+  },
+  {
+    name: "save_video",
+    description:
+      "Save one video and its extracted comments to the database. Call this right after extracting a video's comments. Returns an error message if the data is invalid — fix it and call again.",
+    schema: z.object({
+      url: z.string().describe("The TikTok video URL"),
+      comments: z
+        .array(
+          z.object({
+            author: z.string().describe("Commenter @username"),
+            text: z.string().min(1).describe("The comment text"),
+            likes: z.string().describe("Like count as a string, e.g. \"42\""),
+          }),
+        )
+        .describe("The comments extracted for this video"),
     }),
   }
 );
@@ -263,5 +381,6 @@ export const allTools = [
   getElementText,
   clickElement,
   extractVideoUrl,
-  scrapeComments,
+  getCommentsHtml,
+  saveVideo,
 ];

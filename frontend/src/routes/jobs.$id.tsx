@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { Card } from '../components/ui/foundations/card'
 import { Button } from '../components/ui/foundations/button'
 import { Badge } from '../components/ui/foundations/Badge'
@@ -25,6 +26,15 @@ function JobDetailError() {
 
 function JobDetail() {
   const job = Route.useLoaderData()
+  const router = useRouter()
+
+  // While the classifier is still working, poll for the verdict so it appears
+  // without a manual reload.
+  useEffect(() => {
+    if (job.status !== 'pending' && job.status !== 'processing') return
+    const id = setInterval(() => router.invalidate(), 3000)
+    return () => clearInterval(id)
+  }, [job.status, router])
 
   const isDisinfo  = job.verdict === 'disinformation'
   const isAuth     = job.verdict === 'authentic'
@@ -78,8 +88,8 @@ function JobDetail() {
             {isDisinfo ? 'Disinformation' : isAuth ? 'Authentic News' : job.status === 'processing' ? 'Analyzing…' : 'Pending'}
           </div>
           <div className="mt-1 text-sm text-muted-foreground">
-            {isDisinfo && 'This video was classified as disinformation by Vertex AI.'}
-            {isAuth    && 'This video was classified as authentic news by Vertex AI.'}
+            {isDisinfo && 'This video was classified as disinformation by Gemini.'}
+            {isAuth    && 'This video was classified as authentic news by Gemini.'}
             {isPending && job.status === 'processing' && 'The agent is currently analyzing this video.'}
             {isPending && job.status === 'pending'    && 'This job is waiting in the queue.'}
             {isPending && job.status === 'failed'     && 'Processing failed. The video could not be analyzed.'}
